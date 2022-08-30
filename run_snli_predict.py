@@ -8,7 +8,7 @@ import logging
 import os
 import random
 import sys
-
+import json
 import numpy as np
 import torch
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
@@ -121,8 +121,8 @@ class SnliProcessor(DataProcessor):
         if i == 0:
             continue
         guid = "%s-%s" % (set_type, line[0])
-        text_a = line[7]
-        text_b = line[8]
+        text_a = line[1]
+        text_b = line[2]
         label = line[-1]
         examples.append(
             InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
@@ -405,6 +405,7 @@ def main():
                              "Positive power of 2: static loss scaling value.\n")
     parser.add_argument('--server_ip', type=str, default='', help="Can be used for distant debugging.")
     parser.add_argument('--server_port', type=str, default='', help="Can be used for distant debugging.")
+    parser.add_argument('--eval_model', type=str, default='pytorch_model.bin', help="Name of the pytorch model file to be used for eval")
     args = parser.parse_args()
 
     if args.server_ip and args.server_port:
@@ -501,7 +502,7 @@ def main():
         eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=args.eval_batch_size)
 
         # epoch = 1
-        output_model_file = os.path.join(args.output_dir, "pytorch_model.bin")
+        output_model_file = os.path.join(args.output_dir, args.eval_model)
         model_state_dict = torch.load(output_model_file)
         predict_model = BertForSequenceClassificationTag.from_pretrained(args.bert_model,
                                                                          state_dict=model_state_dict,
@@ -538,7 +539,7 @@ def main():
         eval_accuracy = eval_accuracy / nb_eval_examples
         result = {'eval_loss': eval_loss,
                   'eval_accuracy': eval_accuracy}
-        output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
+        output_eval_file = os.path.join(args.output_dir, args.eval_model + "eval_results.txt")
         with open(output_eval_file, "a") as writer:
             logger.info("***** Eval results *****")
             for key in sorted(result.keys()):
@@ -565,13 +566,13 @@ def main():
         eval_sampler = SequentialSampler(eval_data)
         eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=args.eval_batch_size)
 
-        output_model_file = os.path.join(args.output_dir, "pytorch_model.bin")
+        output_model_file = os.path.join(args.output_dir, args.eval_model)
         model_state_dict = torch.load(output_model_file)
         predict_model = BertForSequenceClassificationTag.from_pretrained(args.bert_model, state_dict=model_state_dict,num_labels = num_labels,tag_config=tag_config)
         predict_model.to(device)
         predict_model.eval()
         predictions = []
-
+        index = 0
         for input_ids, input_mask, segment_ids, start_end_idx, input_tag_ids in tqdm(
                 eval_dataloader, desc="Evaluating"):
             input_ids = input_ids.to(device)
@@ -583,12 +584,18 @@ def main():
                 logits = predict_model(input_ids, segment_ids, input_mask, start_end_idx, input_tag_ids, None)
             logits = logits.detach().cpu().numpy()
             for (i, prediction) in enumerate(logits):
+                # pred_entry = {}
+                # pred_entry['index'] = int(index)
+                # index = index+1
+                # pred_entry['logits'] = [float(score) for score in prediction]
                 predict_label = np.argmax(prediction)
                 predictions.append(predict_label)
+                # predictions.append(pred_entry)
 
-        output_test_file = os.path.join(args.output_dir, "_pred_results.tsv")
+        output_test_file = os.path.join(args.output_dir, args.eval_model + "_pred_results.tsv")
         index = 0
         with open(output_test_file, "w") as writer:
+            # json.dump(predictions,writer,indent=4)
             writer.write("index" + "\t" + "prediction" + "\n")
             for pred in predictions:
                 writer.write(str(index) + "\t" + str(label_list[int(pred)]) + "\n")
