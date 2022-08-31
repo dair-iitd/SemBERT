@@ -594,7 +594,7 @@ def main():
                 # predictions.append(predict_label)
                 predictions.append(pred_entry)
 
-        output_test_file = os.path.join(args.output_dir, args.domain + "_" + args.dataset + "_score_cache.json")
+        output_test_file = os.path.join(args.output_dir, args.domain + "_" + args.dataset + "_score_only.json")
         index = 0
         with open(output_test_file, "w") as writer:
             json.dump(predictions,writer,indent=4)
